@@ -1,9 +1,14 @@
-spring_getbean
+spring-get-bean
 ========
 
 ```
-        Blog bean = (Blog)xmlBeanFactory.getBean("blog");
+    Blog bean = (Blog)xmlBeanFactory.getBean("blog");
 ```
+
+
+XmlBeanFactory继承了AbstractBeanFactory，
+最终调用AbstractBeanFactory.doGetBean。该方法是关键的实现。
+
 
 AbstractBeanFactory  getBean doGetBean
 
@@ -62,7 +67,9 @@ singletonObject用于缓存单例的bean
 earlySingletonObjects则缓存正在创建的bean
 
 
+
 而`getSingleton(String beanName, ObjectFactory<?> singletonFactory)`内容为
+
 ```
 public Object getSingleton(String beanName, ObjectFactory<?> singletonFactory) {
 	beforeSingletonCreation(beanName);	// 错误检查,子类可扩展
@@ -91,6 +98,7 @@ sharedInstance = getSingleton(beanName, new ObjectFactory<Object>() {
 ```  
 真正的创建bean过程在上述代码的`createBean`方法，
 `createBean`方法由`AbstractAutowireCapableBeanFactory`实现
+
 ```
 	protected Object createBean(String beanName, RootBeanDefinition mbd, Object[] args) throws BeanCreationException {
 		
@@ -166,6 +174,7 @@ protected Object initializeBean(final String beanName, final Object bean, RootBe
 ```
 
 查看一下beanWrapper的创建过程
+
 ```
 protected BeanWrapper createBeanInstance(String beanName, RootBeanDefinition mbd, Object[] args) {
 	Class<?> beanClass = resolveBeanClass(mbd, beanName);
@@ -186,33 +195,68 @@ protected BeanWrapper createBeanInstance(String beanName, RootBeanDefinition mbd
 ```
 
 `autowireConstructor`逻辑非常复杂，这里不展开。
-`instantiateBean`也自行查看代码。
 
-`populateBean`将存放在RootBeanDefinition中的属性移到BeanWrapper中，并进一步处理。
+```
+	protected BeanWrapper instantiateBean(final String beanName, final RootBeanDefinition mbd) {
+		...
+		Object beanInstance;
+		
+		beanInstance = getInstantiationStrategy().instantiate(mbd, beanName, parent);	// 创建bena
+		BeanWrapper bw = new BeanWrapperImpl(beanInstance);	// 创建beanWrapper
+		initBeanWrapper(bw);	// 注册用户自定义的处理器
+		return bw;
+		
+	}
+```
+
+这里将调用到`SimpleInstantiationStrategy`
+```
+public Object instantiate(RootBeanDefinition bd, String beanName, BeanFactory owner) {
+	constructorToUse = (Constructor<?>) bd.resolvedConstructorOrFactoryMethod;
+	
+	
+		final Class<?> clazz = bd.getBeanClass();
+		
+		constructorToUse =	clazz.getDeclaredConstructor((Class[]) null);	// 获取构造方法
+		
+		return BeanUtils.instantiateClass(constructorToUse); // 返回实例
+	
+	
+
+	
+
+}
+
+public static <T> T instantiateClass(Constructor<T> ctor, Object... args)... {
+	ReflectionUtils.makeAccessible(ctor);
+	return ctor.newInstance(args);	// 返回实例
+}
+
+
+```
+
+
+
+
+
+在读取配置时，已经将属性的propername，type，等基本消息读取存放到PropertyValues中，
+`populateBean`解析属性的值，并注入到bean中。
 ```
 protected void populateBean(String beanName, RootBeanDefinition mbd, BeanWrapper bw) {
 	PropertyValues pvs = mbd.getPropertyValues();	// 已从配置中读取的属性信息
 
-	for (BeanPostProcessor bp : getBeanPostProcessors()) {
-		if (bp instanceof InstantiationAwareBeanPostProcessor) {
-			InstantiationAwareBeanPostProcessor ibp = (InstantiationAwareBeanPostProcessor) bp;
-			if (!ibp.postProcessAfterInstantiation(bw.getWrappedInstance(), beanName)) {
-				continueWithPropertyPopulation = false;
-				break;
-			}
-		}
-	}
+	...
 	
 	if (mbd.getResolvedAutowireMode() == RootBeanDefinition.AUTOWIRE_BY_NAME ||
 			mbd.getResolvedAutowireMode() == RootBeanDefinition.AUTOWIRE_BY_TYPE) {
 		MutablePropertyValues newPvs = new MutablePropertyValues(pvs);
 
-		// Add property values based on autowire by name if applicable.
+		// 通过name自动注入
 		if (mbd.getResolvedAutowireMode() == RootBeanDefinition.AUTOWIRE_BY_NAME) {
 			autowireByName(beanName, mbd, bw, newPvs);
 		}
 
-		// Add property values based on autowire by type if applicable.
+		// 通过type自动注入
 		if (mbd.getResolvedAutowireMode() == RootBeanDefinition.AUTOWIRE_BY_TYPE) {
 			autowireByType(beanName, mbd, bw, newPvs);
 		}
@@ -233,9 +277,23 @@ protected void populateBean(String beanName, RootBeanDefinition mbd, BeanWrapper
 		}
 	}
 
-
+	// 将值注到bean中
 	applyPropertyValues(beanName, mbd, bw, pvs);
 }
 
 ```
+
+
+
+```
+protected void autowireByName(
+			String beanName, AbstractBeanDefinition mbd, BeanWrapper bw, MutablePropertyValues pvs) {
+	for (String propertyName : propertyNames) {
+		Object bean = getBean(propertyName);	// 获取bean
+		pvs.add(propertyName, bean);	// 
+		registerDependentBean(propertyName, beanName);	// 声明依赖
+	}			
+}
+```
+
 
