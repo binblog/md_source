@@ -1,5 +1,3 @@
-java_class_format
-========
 **语言无关**
 
 除了Java语言， 其他语言也可以运行在Java虚拟机上。Java规范分为Java语言规范和Java虚拟机规范。 Java虚拟机不和包括Java在内的任何语言绑定， 它只与“Class文件”这种特定的二进制文件格式所关联。基于安全方面的考虑， Java虚拟机规范要求在Class文件中使用许多强制性的语法及结构化约束，但任何一门功能性语言， 只要可以把程序代码编译成能被Java虚拟机接受的有效的Class文件， 它就可以运行在Java虚拟机上。
@@ -247,7 +245,7 @@ ca fe ba be | |  魔法数
 00 00 | 0 | 该字段没有携带属性
 **字段表结束** | -- | --
 **方法表集合开始** | -- | -- 
-00 03 | 3 | 3个方法(位置:120/1)
+00 03 | 3 | 3个方法(位置:120/0)
 00 01 | 1 | **方法1** public方法
 00 07 | 7 | 指向常量#7 -字符串值:inti<>
 00 08 | 8 | 指向常量#8 -字符串值:()V
@@ -277,3 +275,46 @@ ca fe ba be | |  魔法数
 
 *表中（位置:x/y）对应上图中字节在WinHex中的位置*
 
+下面第一个方法`inti<>`中的code属性(位置从120/4到150/f)  
+根据code属性表结构
+
+类型 | 名称 | 数量
+---|---|---
+u2 | attribute_name_index | 1
+u4 | attributes_length | 1
+u2 | max_stack | 1
+u2 | max_locals | 1
+u4 | code_lenght | 1
+u1 | code | code_lenght
+u2 | exception_table_length | 1
+exception_info | exception_table | exception_table_length
+u2 | attributes_count | 1
+attribute_info | attributes | attributes_count
+
+解析字节如下
+
+16进制值 | 10进制值 | 	解析
+---|---|---
+00 09 | 9 |  属性名称 指向常量#9 -字符串值:code
+00 00 00 2f | 47 | 
+00 01 | 1 | max_stack
+00 01 | 1 | max_locals
+00 00 00 05 | 5 | 字节码数量
+2A B7 00 01 B1 	| 字节码
+00 00 | | 不抛出异常
+00 02	| 2 | 2个局部变量
+00 0a | 10 | **局部变量1** attribute_name_index 指定变量#10 -字符串值:LineNumberTable
+00 00 00 06  | 6  | attribute_length 
+000100000006   | | 
+00 0b  | 11| **局部变量2** attribute_name_index   指定变量#11 -字符串值:LocalVariableTable
+00 00 00 0c | 12 | attribute_length
+000100000005000C000D0000 | |
+
+在实例方法局部变量表中会预留出每一个Variable Slot（局部变量表最小单位）位来存放对象实例引用
+
+
+最重要是字节码`2A B7 00 01 B1`，虚拟机将方法体中的代码转化为字节码存储在这里。  
+`2A` aload_0 将第0个Slot中reference类型的本地变量推送到操作数栈顶  
+`B7` invokerspecial 以栈顶reference类型数据所指对象作为方法接收者，调用此对象的实例构造器方法，private方法或它的父类方法。该指令接收一个u2类型的参数说明具体调用哪一个方法。  
+`0001` invokerspecial参数 指向常量#1  
+`B1` return 

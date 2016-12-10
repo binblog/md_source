@@ -48,34 +48,6 @@ public class JavaVMStackSOF {
 `stackLeak()`方法不断调用自身，导致虚拟机栈溢出，抛出异常`java.lang.StackOverflowError`
 
 
-
-```
-public class JavaVmStackOOM {
-	public void stackLeakByThead() {
-		while(true) {	// 不断创建新的线程
-			Thread thread = new Thread(new Runnable() {
-				public void run() {
-					while(true) {	// 阻止线程结束
-					}
-				}
-			});
-			thread.start();
-		}
-	}
-
-	public static void main(String[] args) {
-		try {
-			JavaVmStackOOM oom = new JavaVmStackOOM();
-			oom.stackLeakByThead();
-		} catch (Throwable e) {
-			e.printStackTrace();
-		}
-	}
-}
-```
-程序不断地创建新的线程，导致虚拟机栈内存溢出。  
-输出异常信息（程序可能造成系统假死）`java.lang.OutOfMemoryError: unable to create new native thread`
-
 #### 本地方法栈
 
 与虚拟机栈相似, 但它为虚拟机用到的Native方法服务.
@@ -125,14 +97,51 @@ MaxPermSize可以上限（jdk后失效）
 ##### 运行时常量池
 运行时常量池是方法区的一部分，用于存储编译期生成的各种字面量和符号引用。
 
+#### jdk8变化
 jdk6:
 ![](java-memory/1.png)
 
 jdk8:
 ![](java-memory/2.png)
 Jdk8 中方法区被删除，直接使用本地内存来表示类的元数据，这个区域就叫做元空间。
+而字面量(interned strings)转移到了java heap；类的静态变量(class statics)转移到了java heap。
 JVM会忽略PermSize和MaxPermSize这两个参数，也不会出现java.lang.OutOfMemoryError: PermGen error的异常了。  
-[Java 8的元空间](http://it.deepinmind.com/gc/2014/05/14/metaspace-in-java-8.html)
+
+
+
+```
+public class StringOomMock {
+    private static String  base = "string";
+    public static void main(String[] args) {
+        List<String> list = new ArrayList<String>();
+        for (int i=0;i< Integer.MAX_VALUE;i++){
+            String str = base + base;
+            base = str;
+            list.add(str.intern());
+        }
+    }
+}
+```
+
+
+在jdk8 下，抛出
+```
+Exception in thread "main" java.lang.OutOfMemoryError: Java heap space
+	at java.util.Arrays.copyOf(Arrays.java:3332)
+	at java.lang.AbstractStringBuilder.expandCapacity(AbstractStringBuilder.java:137)
+	at java.lang.AbstractStringBuilder.ensureCapacityInternal(AbstractStringBuilder.java:121)
+	at java.lang.AbstractStringBuilder.append(AbstractStringBuilder.java:421)
+	at java.lang.StringBuilder.append(StringBuilder.java:136)
+	at memory.StringOomMock.main(StringOomMock.java:14)
+	at sun.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+	at sun.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:62)
+	at sun.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.lang.reflect.Method.invoke(Method.java:498)
+	at com.intellij.rt.execution.application.AppMain.main(AppMain.java:140)
+
+Process finished with exit code 1
+```
+可以看到发生了堆内存溢出，可见字符串常量已经由永久代转移到堆中。
 
 
 #### 直接内存
@@ -144,5 +153,9 @@ JVM会忽略PermSize和MaxPermSize这两个参数，也不会出现java.lang.Out
 [深入理解Java虚拟机（第2版）](https://book.douban.com/subject/24722612/)  
 [Java - 虚拟机学习笔记1 自动内存管理机制](http://www.jianshu.com/p/2f2f03d29de5)
 
+[Java8内存模型—永久代(PermGen)和元空间(Metaspace)](http://www.cnblogs.com/paddix/p/5309550.html)
+
+
+http://ifeve.com/java-permgen-removed/
 
 http://www.codeceo.com/article/java-memory-area.html

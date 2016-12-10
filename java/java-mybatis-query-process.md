@@ -56,6 +56,13 @@ public void  test() throws IOException {
 
 例子很简单。
 
+
+
+
+**mybatis分层结构**如下
+![](java-mybatis-query-process/1.png)
+
+下面简单看一下mybatis中sql查询的执行流程。
 ### 构建过程
 `new SqlSessionFactoryBuilder().build(inputStream)`会解析mybatis-config.xml配置文件，并构建SqlSessionFactory对象。
 ```
@@ -66,9 +73,16 @@ public SqlSessionFactory build(InputStream inputStream, String environment, Prop
 }
 ```
 
-`parser.parse()`使用`XMLConfigBuilder`对mybatis-config.xml解析，
+`parser.parse()`使用`XMLConfigBuilder`对mybatis-config.xml解析，会将解析结果将存放到XMLConfigBuilder父类BaseBuilder的`configuration`属性中，并返回`configuration`属性。
 
-`XMLConfigBuilder`解析过程为
+而`build(Configuration config)`则创建一个DefaultSqlSessionFactory对象
+```
+public SqlSessionFactory build(Configuration config) {
+    return new DefaultSqlSessionFactory(config);
+}
+```
+
+`XMLConfigBuilder`解析配置文件过程为
 ```
 public Configuration parse() {
     ...
@@ -93,15 +107,8 @@ private void parseConfiguration(XNode root) {
     }
 }
 ```
-可以看到方法中对mybatis-config.xml配置的内容逐一进行了解析。
-解析结果将存放到`baseBuilder.configuration`属性中
+可以看到方法中对mybatis-config.xml配置的内容逐一进行了解析，这里不再细说。
 
-`build(Configuration config)`则创建一个DefaultSqlSessionFactory对象
-```
-public SqlSessionFactory build(Configuration config) {
-    return new DefaultSqlSessionFactory(config);
-}
-```
 
 ### 获取SqlSession
 ```
@@ -122,7 +129,7 @@ private SqlSession openSessionFromDataSource(ExecutorType execType, TransactionI
     return new DefaultSqlSession(configuration, executor, autoCommit);
 }
 ```
-上述方法中创建了事务管理工厂，简单的执行器SimpleExecutor，并构成了一个DefaultSqlSession。
+上述方法中创建了事务管理工厂，简单的执行器SimpleExecutor，并构造了DefaultSqlSession。
 
 
 ### 执行查询
@@ -138,9 +145,11 @@ public <E> List<E> selectList(String statement, Object parameter, RowBounds rowB
 	return result;
 }
 ```
-MappedStatement是BlogMapper.xml的解析结果，解析过程在`XMLConfigBuilder.mapperElement(XNode parent)`方法。executor为SimpleExecutor。
+MappedStatement是BlogMapper.xml的解析结果，解析过程在`XMLConfigBuilder.mapperElement(XNode parent)`方法。
 
-`executor.query`将调用`BaseExecutor.query`方法
+
+
+`executor.query`将调用SimpleExecutor父类BaseExecutor的`query`方法
 ```
 public <E> List<E> query(MappedStatement ms, Object parameter, RowBounds rowBounds, ResultHandler resultHandler) throws SQLException {
     BoundSql boundSql = ms.getBoundSql(parameter);  // 生成sql语句
@@ -165,22 +174,23 @@ private <E> List<E> queryFromDatabase(MappedStatement ms, Object parameter, RowB
 }
 ```
 
-`ms.getBoundSql(parameter)`是一个关键方法，负责生成sql语句（待解析）。  
+`ms.getBoundSql(parameter)`是一个关键方法，负责生成sql语句。  
 
 `doQuery`由`SimpleExecutor`实现
 ```
   public <E> List<E> doQuery(MappedStatement ms, Object parameter, RowBounds rowBounds, ResultHandler resultHandler, BoundSql boundSql) throws SQLException {
     Statement stmt = null;
     try {
-      Configuration configuration = ms.getConfiguration();
-      StatementHandler handler = configuration.newStatementHandler(wrapper, ms, parameter, rowBounds, resultHandler, boundSql);
-      stmt = prepareStatement(handler, ms.getStatementLog());
-      return handler.<E>query(stmt, resultHandler);
+      Configuration configuration = ms.getConfiguration();	
+      StatementHandler handler = configuration.newStatementHandler(wrapper, ms, parameter, rowBounds, resultHandler, boundSql);	// 生成StatementHandler
+      stmt = prepareStatement(handler, ms.getStatementLog());	// 参数处理
+      return handler.<E>query(stmt, resultHandler);	// 查询及处理结果
     } finally {
       closeStatement(stmt);
     }
   }
 ```
+
 StatementHandler是一个关键的Handler接口，有如下方法
 ```
 public interface StatementHandler {
@@ -203,8 +213,7 @@ public interface StatementHandler {
 ![](http://ofbrwsjmr.bkt.clouddn.com/mybatis_select_source/1.png)
 
 
-`configuration.newStatementHandler`将生成一个RoutingStatementHandler类，但RoutingStatementHandler实际上是对PreparedStatementHandler，CallableStatementHandler，SimpleStatementHandler的路由处理，会根据MappedStatement.StatementType，将请求对应转发到这些类上。  
-MappedStatement.StatementType默认为PREPARED，即使用PreparedStatementHandler。
+`configuration.newStatementHandler`将生成一个RoutingStatementHandler类，RoutingStatementHandler实际上是对PreparedStatementHandler，CallableStatementHandler，SimpleStatementHandler的路由处理，会根据MappedStatement.StatementType，将请求对应转发到这些类上。  
 ```
 public StatementHandler newStatementHandler(Executor executor, MappedStatement mappedStatement, Object parameterObject, RowBounds rowBounds, ResultHandler resultHandler, BoundSql boundSql) {
     StatementHandler statementHandler = new RoutingStatementHandler(executor, mappedStatement, parameterObject, rowBounds, resultHandler, boundSql);
@@ -212,6 +221,8 @@ public StatementHandler newStatementHandler(Executor executor, MappedStatement m
     return statementHandler;
 }
 ```
+MappedStatement.StatementType默认为PREPARED，即使用PreparedStatementHandler。
+
 
 `prepareStatement(handler, ms.getStatementLog())`会创建Statement对象，并处理sql查询参数
 ```
@@ -224,7 +235,7 @@ private Statement prepareStatement(StatementHandler handler, Log statementLog) t
 }
 ```
   
-PreparedStatementHandler.parameterize：
+`handler.parameterize`会调用PreparedStatementHandler.parameterize方法：
 ```
 public void parameterize(Statement statement) throws SQLException {
     parameterHandler.setParameters((PreparedStatement) statement);
@@ -232,7 +243,7 @@ public void parameterize(Statement statement) throws SQLException {
 ```
 parameterHandler负责对参数进行处理。
 
-PreparedStatementHandler.query方法:
+`handler.<E>query`则调用PreparedStatementHandler.query方法:
 ```
 public <E> List<E> query(Statement statement, ResultHandler resultHandler) throws SQLException {
     PreparedStatement ps = (PreparedStatement) statement;
@@ -240,14 +251,16 @@ public <E> List<E> query(Statement statement, ResultHandler resultHandler) throw
     return resultSetHandler.<E> handleResultSets(ps);   // 处理结果
 }
 ```
-
 resultSetHandler负责对结果进行处理。
 
-### 解析sql语句
+上述简单记录了一下mysql的sql查询的执行流程，但对于核心的实现并没有详细分析，如
+**MappedStatement.getBoundSql**解析sql语句  
+**ParameterHandler.setParameters**处理查询参数  
+**resultSetHandler.handleResultSets**处理查询结果
 
-### parameterHandler
-
-### resultSetHandler
-
+同时，对于核心管理也还没有涉及到  
+**连接管理**  
+**事务管理**  
+**缓存实现**
 
 
