@@ -1,5 +1,4 @@
 bean类
-
 ~~~
 public class Blog {
     private String title;
@@ -9,7 +8,6 @@ public class Blog {
 ~~~
 
 spring.xml配置  
-
 ```
     <bean id="blog" class="spring.bean.Blog">
         <property name="title" value="hello spring"></property>
@@ -17,9 +15,8 @@ spring.xml配置
 ```
 
 
-test
-
-```
+测试方法
+```java
 	@Test
     public void test() {
         BeanFactory xmlBeanFactory = new XmlBeanFactory(new ClassPathResource("spring.xml"));
@@ -35,7 +32,7 @@ test
 
 ## 加载配置
 
-```
+```java
 BeanFactory bf = new XmlBeanFactory(new ClassPathResource("spring.xml"));
 ```
 加载过程大致示意图
@@ -49,90 +46,90 @@ BeanDefinitionParserDelegate->BeanDefinitionParserDelegate:parseBeanDefinitionEl
 
 跟踪`XmlBeanFactory`的构造方法，
 
-```
+```java
 	public XmlBeanFactory(Resource resource, BeanFactory parentBeanFactory) ... {
 		super(parentBeanFactory);
-		this.reader.loadBeanDefinitions(resource);
+		this.reader.loadBeanDefinitions(resource);	// 注:this.reader为XmlBeanDefinitionReader
 	}
 ```
 
-XmlBeanFactory创建了XmlBeanDefinitionReader，XmlBeanDefinitionReader.loadBeanDefinitions：
-
-```
-	public int loadBeanDefinitions(Resource resource) ... {
-		return loadBeanDefinitions(new EncodedResource(resource));
-	}
-
-	public int loadBeanDefinitions(EncodedResource encodedResource) ... {
-          ...
-		InputStream inputStream = encodedResource.getResource().getInputStream();	//获取配置文件的InputStream
-    	InputSource inputSource = new InputSource(inputStream);	// 构造InputSource
-		return doLoadBeanDefinitions(inputSource, encodedResource.getResource());	// 解析InputSource
-	}
-```
-
-
-```
+XmlBeanDefinitionReader.loadBeanDefinitions：
+```java
+public int loadBeanDefinitions(Resource resource) ... {
+	return loadBeanDefinitions(new EncodedResource(resource));
+}
+  
+public int loadBeanDefinitions(EncodedResource encodedResource) ... {
+    ...
+	
+	//获取配置文件的InputStream
+	InputStream inputStream = encodedResource.getResource().getInputStream();	
+	// 构造InputSource
+   	InputSource inputSource = new InputSource(inputStream);	
+	// 解析InputSource
+	return doLoadBeanDefinitions(inputSource, encodedResource.getResource());	
+}
+  
 protected int doLoadBeanDefinitions(InputSource inputSource, Resource resource)     ... {
-    Document doc = doLoadDocument(inputSource, resource);	// 获取Document对象
-	return registerBeanDefinitions(doc, resource);	// 解析Document
+    // 获取Document对象
+	Document doc = doLoadDocument(inputSource, resource);	
+	// 解析Document
+	return registerBeanDefinitions(doc, resource);	
 }  
+  
+public int registerBeanDefinitions(Document doc, Resource resource) ... {
+	...
+	// 创建DefaultBeanDefinitionDocumentReader对象
+	BeanDefinitionDocumentReader documentReader = createBeanDefinitionDocumentReader();	
+	// 解析documentReader 注:createReaderContext()创建XmlReaderContext对象	
+	documentReader.registerBeanDefinitions(doc, createReaderContext(resource));	
+}
 ```
 
-```
-	public int registerBeanDefinitions(Document doc, Resource resource) ... {
-		...
-		BeanDefinitionDocumentReader documentReader = createBeanDefinitionDocumentReader();		// 创建documentReader对象
-		documentReader.registerBeanDefinitions(doc, createReaderContext(resource));	// 解析documentReader
-	}
-```
-createReaderContext() 方法创建XmlReaderContext对象，用于存储上下文信息
-
-createBeanDefinitionDocumentReader()方法创建了DefaultBeanDefinitionDocumentReader对象，DefaultBeanDefinitionDocumentReader.registerBeanDefinitions:
-
-```
-	public void registerBeanDefinitions(Document doc, XmlReaderContext readerContext) {
-		...
-		Element root = doc.getDocumentElement();	// 获取root元素
-		doRegisterBeanDefinitions(root);	// 解析root元素
-	}
-
-    protected void doRegisterBeanDefinitions(Element root) {
-        ...
-		this.delegate = createDelegate(getReaderContext(), root, parent);	// 创建delegate对象
-		preProcessXml(root);
-		parseBeanDefinitions(root, this.delegate);	// 
-		postProcessXml(root);
-    }
-```
-preProcessXml和postProcessXml都是模板方法，提供给子类实现。
-createDelegate()方法创建了BeanDefinitionParserDelegate实例。
-
-```
-	protected void parseBeanDefinitions(Element root, BeanDefinitionParserDelegate delegate) {
-		if (delegate.isDefaultNamespace(root)) {
-			NodeList nl = root.getChildNodes();
-			for (int i = 0; i < nl.getLength(); i++) {
-				Node node = nl.item(i);
-				if (node instanceof Element) {
-					Element ele = (Element) node;
-					if (delegate.isDefaultNamespace(ele)) {
-						parseDefaultElement(ele, delegate);	// 解析node结点
-					}
-					else {
-						delegate.parseCustomElement(ele);
-					}
+DefaultBeanDefinitionDocumentReader.registerBeanDefinitions:
+```java
+public void registerBeanDefinitions(Document doc, XmlReaderContext readerContext) {
+	...
+	// 获取root元素
+	Element root = doc.getDocumentElement();	
+	// 解析root元素
+	doRegisterBeanDefinitions(root);	
+}
+   
+protected void doRegisterBeanDefinitions(Element root) {
+	...
+	// 创建BeanDefinitionParserDelegate对象
+	this.delegate = createDelegate(getReaderContext(), root, parent);	
+	preProcessXml(root);	// 模板方法，提供给子类扩展
+	parseBeanDefinitions(root, this.delegate);		// 解析root元素
+	postProcessXml(root);	// 模板方法，提供给子类扩展
+}
+  
+protected void parseBeanDefinitions(Element root, BeanDefinitionParserDelegate delegate) {
+	if (delegate.isDefaultNamespace(root)) {
+		NodeList nl = root.getChildNodes();
+		for (int i = 0; i < nl.getLength(); i++) {
+			Node node = nl.item(i);
+			if (node instanceof Element) {
+				Element ele = (Element) node;
+				if (delegate.isDefaultNamespace(ele)) {
+					parseDefaultElement(ele, delegate);	// 解析node结点
+				}
+				else {
+					delegate.parseCustomElement(ele);
 				}
 			}
 		}
-		else {
-			delegate.parseCustomElement(root);
-		}
 	}
+	else {
+		delegate.parseCustomElement(root);
+	}
+}
 ```
 上述方法根据Namespace Uri判断node是否为Spring定义的元素，如果是，则调用parseDefaultElement方法解析元素。
+用户可以自定义标签及标签解析器。
 
-```
+```java
 	private void parseDefaultElement(Element ele, BeanDefinitionParserDelegate delegate) {
 		if (delegate.nodeNameEquals(ele, IMPORT_ELEMENT)) {	// 解析import标签
 			importBeanDefinitionResource(ele);
@@ -148,35 +145,40 @@ createDelegate()方法创建了BeanDefinitionParserDelegate实例。
 		}
 	}
 ```
+
 `parseDefaultElement`方法对import，alias，bean，beans标签进行了解析，这里主要看bean的解析过程：
-
-```
-	protected void processBeanDefinition(Element ele, BeanDefinitionParserDelegate delegate) {
-		BeanDefinitionHolder bdHolder = delegate.parseBeanDefinitionElement(ele);	// 解析元素,将创建BeanDefinitionHolder对象
-		if (bdHolder != null) {
-			bdHolder = delegate.decorateBeanDefinitionIfRequired(ele, bdHolder);	// 装饰模式
-
-				BeanDefinitionReaderUtils.registerBeanDefinition(bdHolder, getReaderContext().getRegistry());	// 注册BeanDefinition，即将解析结果存储在registry对象中.
-			
-			// 发送事件
-			getReaderContext().fireComponentRegistered(new BeanComponentDefinition(bdHolder));
-		}
+```java
+protected void processBeanDefinition(Element ele, BeanDefinitionParserDelegate delegate) {
+	// 解析元素,解析结果为BeanDefinitionHolder对象
+	BeanDefinitionHolder bdHolder = delegate.parseBeanDefinitionElement(ele);	
+	if (bdHolder != null) {
+		bdHolder = delegate.decorateBeanDefinitionIfRequired(ele, bdHolder);	// 装饰模式
+		
+		// 注册BeanDefinition，即将解析结果存储在registry对象中.
+		BeanDefinitionReaderUtils.registerBeanDefinition(bdHolder,getReaderContext().getRegistry());	
+		
+		// 发送事件
+		getReaderContext().fireComponentRegistered(new BeanComponentDefinition(bdHolder));
 	}
+}
 ```
 
-BeanDefinitionHolder中包含了BeanDefinition，   
-BeanDefinition是配置文件<bean>元素标签在容器中的内部表示形式。
-在配置文件中可以定义父<bean>和子<bean>，父<bean>或没有父<bean>的bean使用RootBeanDefinition表示，是最常用的表示。  
-spring将配置文件中<bean>配置信息转化为beanDefinition对象，并注册到DeanDefinitionegistry中。
+BeanDefinitionHolder中包含了BeanDefinition实例。     
+BeanDefinition是配置文件中`<bean>`标签在容器中的内部表示形式。  
+BeanDefinition存在子类RootBeanDefinition和ChildBeanDefinition。ChildBeanDefinition表示子`<bean>`,而
+RootBeanDefinition表示父`<bean>`和没有父`<bean>`的bean，是最常用的实现类。  
+spring将配置文件中<bean>配置信息转化为beanDefinition对象，并注册到容器中。
 
-BeanDefinitionParserDelegate.parseBeanDefinitionElement
-
-
-```
+`delegate.parseBeanDefinitionElement`将调用BeanDefinitionParserDelegate.parseBeanDefinitionElement方法:
+```java
 public BeanDefinitionHolder parseBeanDefinitionElement(Element ele, BeanDefinition containingBean) {
+	// 解析bean元素
 	AbstractBeanDefinition beanDefinition = parseBeanDefinitionElement(ele, beanName, containingBean);
 
 	String beanClassName = beanDefinition.getBeanClassName();
+
+	String[] aliasesArray = StringUtils.toStringArray(aliases);
+	return new BeanDefinitionHolder(beanDefinition, beanName, aliasesArray);
 }
 
 public AbstractBeanDefinition parseBeanDefinitionElement(Element ele, String beanName, BeanDefinition containingBean) {
@@ -189,25 +191,26 @@ public AbstractBeanDefinition parseBeanDefinitionElement(Element ele, String bea
 
 	AbstractBeanDefinition bd = createBeanDefinition(className, parent);
 
-	parseBeanDefinitionAttributes(ele, beanName, containingBean, bd);
+	parseBeanDefinitionAttributes(ele, beanName, containingBean, bd);	// 解析"scope","scope"等属性
 	bd.setDescription(DomUtils.getChildElementValueByTagName(ele, DESCRIPTION_ELEMENT));
 
-	parseMetaElements(ele, bd);
-	parseLookupOverrideSubElements(ele, bd.getMethodOverrides());
-	parseReplacedMethodSubElements(ele, bd.getMethodOverrides());
+	parseMetaElements(ele, bd);	// 解析meta属性
+	parseLookupOverrideSubElements(ele, bd.getMethodOverrides());	// 处理lookup-method元素
+	parseReplacedMethodSubElements(ele, bd.getMethodOverrides());	// 处理replaced-method元素
 
-	parseConstructorArgElements(ele, bd);
-	parsePropertyElements(ele, bd);
-	parseQualifierElements(ele, bd);
+	parseConstructorArgElements(ele, bd);	// 解析constructor-arg构造方法参数
+	parsePropertyElements(ele, bd);	// 解析property元素
+	parseQualifierElements(ele, bd);	//解析qualifier元素
 
 	bd.setResource(this.readerContext.getResource());
 	bd.setSource(extractSource(ele));
+
+	return bd;
 }
 ```
 
-下面看一下属性的解析过程
-
-```
+看一下属性的解析过程`parsePropertyElements`
+```java
 	public void parsePropertyElements(Element beanEle, BeanDefinition bd) {
 		NodeList nl = beanEle.getChildNodes();
 		for (int i = 0; i < nl.getLength(); i++) {
@@ -218,9 +221,9 @@ public AbstractBeanDefinition parseBeanDefinitionElement(Element ele, String bea
 		}
 	}
 ```
-遍历所有的子元素，如果是property结点，则进行处理
+遍历所有的子元素，如果是property节点，则进行处理
 
-```
+```java
 public void parsePropertyElement(Element ele, BeanDefinition bd) {
 	...
 	Object val = parsePropertyValue(ele, bd, propertyName);
@@ -230,92 +233,37 @@ public void parsePropertyElement(Element ele, BeanDefinition bd) {
 	bd.getPropertyValues().addPropertyValue(pv);		
 }
 
-public Object parsePropertyValue(Element ele, BeanDefinition bd, String propertyName) {
-		boolean hasRefAttribute = ele.hasAttribute(REF_ATTRIBUTE);
-		boolean hasValueAttribute = ele.hasAttribute(VALUE_ATTRIBUTE);
-
-
-		if (hasRefAttribute) {
-			String refName = ele.getAttribute(REF_ATTRIBUTE);
-			if (!StringUtils.hasText(refName)) {
-				error(elementName + " contains empty 'ref' attribute", ele);
-			}
-			RuntimeBeanReference ref = new RuntimeBeanReference(refName);
-			ref.setSource(extractSource(ele));
-			return ref;
-		}
-		else if (hasValueAttribute) {
-			TypedStringValue valueHolder = new TypedStringValue(ele.getAttribute(VALUE_ATTRIBUTE));
-			valueHolder.setSource(extractSource(ele));
-			return valueHolder;
-		}
-		else if (subElement != null) {
-			return parsePropertySubElement(subElement, bd);
-		}
-		else {
-			// Neither child element nor "ref" or "value" attribute found.
-			error(elementName + " must specify a ref or value", ele);
-			return null;
-		}
-}
 ```
 
 
-最后看一下registerBeanDefinition：
+最后看一下注册过程`BeanDefinitionReaderUtils.registerBeanDefinition(bdHolder, getReaderContext().getRegistry());`  
+BeanDefinitionReaderUtils.registerBeanDefinition内容为：
+```java
+public static void registerBeanDefinition(
+		BeanDefinitionHolder definitionHolder, BeanDefinitionRegistry registry) ...{
 
-```
-				BeanDefinitionReaderUtils.registerBeanDefinition(bdHolder, getReaderContext().getRegistry());
+	// 为bean注册beanname
+	String beanName = definitionHolder.getBeanName();
+	registry.registerBeanDefinition(beanName, definitionHolder.getBeanDefinition());
 
-
-
-	public static void registerBeanDefinition(
-			BeanDefinitionHolder definitionHolder, BeanDefinitionRegistry registry)
-			throws BeanDefinitionStoreException {
-
-		// Register bean definition under primary name.
-		String beanName = definitionHolder.getBeanName();
-		registry.registerBeanDefinition(beanName, definitionHolder.getBeanDefinition());
-
-		// Register aliases for bean name, if any.
-		String[] aliases = definitionHolder.getAliases();
-		if (aliases != null) {
-			for (String alias : aliases) {
-				registry.registerAlias(beanName, alias);
-			}
+	// 为bean注册别名
+	String[] aliases = definitionHolder.getAliases();
+	if (aliases != null) {
+		for (String alias : aliases) {
+			registry.registerAlias(beanName, alias);
 		}
 	}
+}
 		
 ```
 
-关键为`getReaderContext().getRegistry()`
-```
-	public final BeanDefinitionRegistry getRegistry() {
-		return this.reader.getRegistry();
-	}
-
-```
-
-XmlBeanDefinitionReader创建ReaderContext
-
-```
-	public XmlReaderContext createReaderContext(Resource resource) {
-		return new XmlReaderContext(resource, this.problemReporter, this.eventListener,
-				this.sourceExtractor, this, getNamespaceHandlerResolver());
-	}
-```
-XmlBeanDefinitionReader把自身this做为参数创建	XmlBeanDefinitionReader		
-
-XmlBeanFactory在创建XmlBeanDefinitionReader时也将自身作BeanDefinitionRegistry参数传递给XmlBeanDefinitionReader构造方法，所以`getReaderContext().getRegistry()`将返回xmlBeanFactory
-
-xmlBeanFactory并没有重写registerBeanDefinition方法，DefaultListableBeanFactory.registerBeanDefinition:  
-
+最终将调用到DefaultListableBeanFactory.registerBeanDefinition方法:  
 ~~~java
 	@Override
-	public void registerBeanDefinition(String beanName, BeanDefinition beanDefinition)
-			throws BeanDefinitionStoreException {
+	public void registerBeanDefinition(String beanName, BeanDefinition beanDefinition) ... {
 		...
 		this.beanDefinitionMap.put(beanName, beanDefinition);
 
 	}	
 ~~~
-
+最后，bean解析结果beanDefinition存储在DefaultListableBeanFactory的`Map<String, BeanDefinition> beanDefinitionMap`属性中。

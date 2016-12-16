@@ -6,51 +6,50 @@ spring-get-bean
 ```
 
 
-XmlBeanFactory继承了AbstractBeanFactory，
-最终调用AbstractBeanFactory.doGetBean。该方法是关键的实现。
+XmlBeanFactory继承了AbstractBeanFactory，`getBean`将调用AbstractBeanFactory.doGetBean方法。该方法是读取bean的实现。
 
 
-AbstractBeanFactory  getBean doGetBean
-
+AbstractBeanFactory.doGetBean：
 ```
-	protected <T> T doGetBean(
-			final String name, final Class<T> requiredType, final Object[] args, boolean typeCheckOnly)
-			throws BeansException {
-		final String beanName = transformedBeanName(name);	// 处理别名
+protected <T> T doGetBean(
+		final String name, final Class<T> requiredType, final Object[] args, boolean typeCheckOnly) ... {
+	final String beanName = transformedBeanName(name);	// 处理别名
 
-		Object sharedInstance = getSingleton(beanName);		// 从单例缓存中获取
-		
-		// 父Factory
-		BeanFactory parentBeanFactory = getParentBeanFactory();
-		
-		// 配置文件
-		final RootBeanDefinition mbd = getMergedLocalBeanDefinition(beanName);
+	Object sharedInstance = getSingleton(beanName);		// 从单例缓存中获取
+	
+	// 父Factory
+	BeanFactory parentBeanFactory = getParentBeanFactory();
+	
+	// 配置文件
+	final RootBeanDefinition mbd = getMergedLocalBeanDefinition(beanName);
 
-		
-		// 处理依赖
-		String[] dependsOn = mbd.getDependsOn();
-		
-		// bean范围为Singleton
-		if (mbd.isSingleton()) {
+	
+	// 处理依赖
+	String[] dependsOn = mbd.getDependsOn();
+	
+	// bean范围为Singleton
+	if (mbd.isSingleton()) {
 
-			sharedInstance = getSingleton(beanName, new ObjectFactory<Object>() {
+		sharedInstance = getSingleton(beanName, new ObjectFactory<Object>() {
+					
+					public Object getObject() throws BeansException {
+						...
+						return createBean(beanName, mbd, args);		// 真正创建bean
 						
-						public Object getObject() throws BeansException {
-							...
-								return createBean(beanName, mbd, args);		// 创建bean
-							
-						}
-					});
-					bean = getObjectForBeanInstance(sharedInstance, name, beanName, mbd);
-		} else if() {	// 其他处理
-			
-		}		
-	}
+					}
+				});
+				bean = getObjectForBeanInstance(sharedInstance, name, beanName, mbd);
+	} else if() {	// 其他处理
+		...
+	}		
+}
 ```
-注意一下，这里调用了 `getSingleton(String beanName)`和`getSingleton(String beanName, ObjectFactory<?> singletonFactory)`重载方法。
+`getObjectForBeanInstance`方法会根据参数beanInstance进行处理，如果beanInstance是FactoryBean会创建bean，返回直接返回beanInstance。
 
-`getSingleton(String beanName)`在DefaultSingletonBeanRegistry中实现,最终调用
+需要注意，这里调用了两个重载方法 `getSingleton(String beanName)`和`getSingleton(String beanName, ObjectFactory<?> singletonFactory)`  
 
+重载方法一`getSingleton(beanName)`从容器中获取单例bean。  
+DefaultSingletonBeanRegistry.getSingleton:
 ```
 	protected Object getSingleton(String beanName, boolean allowEarlyReference) {
 		...
@@ -62,14 +61,13 @@ AbstractBeanFactory  getBean doGetBean
 		return (singletonObject != NULL_OBJECT ? singletonObject : null);
 	}
 ```
-
 singletonObject用于缓存单例的bean
 earlySingletonObjects则缓存正在创建的bean
 
 
 
-而`getSingleton(String beanName, ObjectFactory<?> singletonFactory)`内容为
-
+重载方法二`getSingleton(String beanName, ObjectFactory<?> singletonFactory)`会通过ObjectFactory创建一个单例bean。
+DefaultSingletonBeanRegistry.getSingleton(String beanName, ObjectFactory<?> singletonFactory):
 ```
 public Object getSingleton(String beanName, ObjectFactory<?> singletonFactory) {
 	beforeSingletonCreation(beanName);	// 错误检查,子类可扩展
@@ -85,40 +83,28 @@ public Object getSingleton(String beanName, ObjectFactory<?> singletonFactory) {
 	
 }
 ```
-`getObjectForBeanInstance(Object beanInstance, String name, String beanName, RootBeanDefinition mbd) `方法会根据参数beanInstance进行处理，如果beanInstance是FactoryBean会创建bean，返回直接返回beanInstance。
 
 
-
+bean创建过程在`return createBean(beanName, mbd, args);`代码，
+`createBean`方法由AbstractAutowireCapableBeanFactory实现：
 ```
-sharedInstance = getSingleton(beanName, new ObjectFactory<Object>() {
-	public Object getObject() throws BeansException {
-		return createBean(beanName, mbd, args);
+protected Object createBean(String beanName, RootBeanDefinition mbd, Object[] args) ... {
+	
+	// 解析class
+	Class<?> resolvedClass = resolveBeanClass(mbd, beanName);
+	
+	// 注意，如果resolveBeforeInstantiation返回非null对象，这里将直接返回
+	Object bean = resolveBeforeInstantiation(beanName, mbdToUse);
+	if (bean != null) {
+		return bean;
 	}
-});
-```  
-真正的创建bean过程在上述代码的`createBean`方法，
-`createBean`方法由`AbstractAutowireCapableBeanFactory`实现
+	
+	// 创建bean
+	Object beanInstance = doCreateBean(beanName, mbdToUse, args);
+	
+	return beanInstance;
+}
 
-```
-	protected Object createBean(String beanName, RootBeanDefinition mbd, Object[] args) throws BeanCreationException {
-		
-		// 解析class
-		Class<?> resolvedClass = resolveBeanClass(mbd, beanName);
-		
-		// 注意，如果resolveBeforeInstantiation返回非null对象，这里将直接返回
-		Object bean = resolveBeforeInstantiation(beanName, mbdToUse);
-		if (bean != null) {
-			return bean;
-		}
-		
-		// 创建bean
-		Object beanInstance = doCreateBean(beanName, mbdToUse, args);
-		
-		return beanInstance;
-	}
-```
-
-```
 protected Object resolveBeforeInstantiation(String beanName, RootBeanDefinition mbd) {
 	bean = applyBeanPostProcessorsBeforeInstantiation(targetType, beanName);
 	
@@ -128,13 +114,15 @@ protected Object resolveBeforeInstantiation(String beanName, RootBeanDefinition 
 
 }
 ```
+`resolveBeforeInstantiation`会调用前置处理方法InstantiationAwareBeanPostProcessor.postProcessBeforeInstantiation,如果InstantiationAwareBeanPostProcessor.postProcessBeforeInstantiation返回非null对象,createBean将直接返回该对象,所以用户可以通过实现InstantiationAwareBeanPostProcessor.postProcessBeforeInstantiation自定义bean对象。
 
 
+AbstractAutowireCapableBeanFactory.doCreateBean:
 ```
 protected Object doCreateBean(final String beanName, final RootBeanDefinition mbd, final Object[] args) {
 	BeanWrapper instanceWrapper = null;
 	
-	// 创建property为空的bean
+	// 创建属性为空的bean
 	instanceWrapper = createBeanInstance(beanName, mbd, args);
 	
 	// processor处理
@@ -144,7 +132,7 @@ protected Object doCreateBean(final String beanName, final RootBeanDefinition mb
 	}
 	
 	Object exposedObject = bean;
-	// 处理属性
+	// 注入属性
 	populateBean(beanName, mbd, instanceWrapper);
 
 	// 调用init方法
@@ -155,26 +143,25 @@ protected Object doCreateBean(final String beanName, final RootBeanDefinition mb
 	// 注册
 	registerDisposableBeanIfNecessary(beanName, bean, mbd);
 }
-```
-
-
-
-```
+  
 protected Object initializeBean(final String beanName, final Object bean, RootBeanDefinition mbd) {
-	invokeAwareMethods(beanName, bean);	// 调用BeanNameAware,BeanClassLoaderAware,BeanFactoryAware的set方法
+	// 调用BeanNameAware,BeanClassLoaderAware,BeanFactoryAware的set方法
+	invokeAwareMethods(beanName, bean);	
 	
-	wrappedBean = applyBeanPostProcessorsBeforeInitialization(wrappedBean, beanName);	// ProcessorsBeforeInitialization方法
+	// ProcessorsBeforeInitialization方法
+	wrappedBean = applyBeanPostProcessorsBeforeInitialization(wrappedBean, beanName);	
 
-	invokeInitMethods()	// init方法
+	// 调用init-method方法
+	invokeInitMethods()	
 	
-	wrappedBean = applyBeanPostProcessorsAfterInitialization(wrappedBean, beanName);	//	postProcessAfterInitialization BeanPostProcessorsAfterInitialization
+	// 调用后处理器BeanPostProcessorsAfterInitialization.postProcessAfterInitialization 
+	wrappedBean = applyBeanPostProcessorsAfterInitialization(wrappedBean, beanName);	
 
 }
 
 ```
 
-查看一下beanWrapper的创建过程
-
+看一下beanWrapper的创建过程
 ```
 protected BeanWrapper createBeanInstance(String beanName, RootBeanDefinition mbd, Object[] args) {
 	Class<?> beanClass = resolveBeanClass(mbd, beanName);
@@ -197,19 +184,19 @@ protected BeanWrapper createBeanInstance(String beanName, RootBeanDefinition mbd
 `autowireConstructor`逻辑非常复杂，这里不展开。
 
 ```
-	protected BeanWrapper instantiateBean(final String beanName, final RootBeanDefinition mbd) {
-		...
-		Object beanInstance;
-		
-		beanInstance = getInstantiationStrategy().instantiate(mbd, beanName, parent);	// 创建bena
-		BeanWrapper bw = new BeanWrapperImpl(beanInstance);	// 创建beanWrapper
-		initBeanWrapper(bw);	// 注册用户自定义的处理器
-		return bw;
-		
-	}
+protected BeanWrapper instantiateBean(final String beanName, final RootBeanDefinition mbd) {
+	...
+	Object beanInstance;
+	
+	beanInstance = getInstantiationStrategy().instantiate(mbd, beanName, parent);	// 创建bena
+	BeanWrapper bw = new BeanWrapperImpl(beanInstance);	// 创建beanWrapper
+	initBeanWrapper(bw);	// 注册用户自定义的处理器
+	return bw;
+	
+}
 ```
-
-这里将调用到`SimpleInstantiationStrategy`
+`getInstantiationStrategy()`返回CglibSubclassingInstantiationStrategy，CglibSubclassingInstantiationStrategy继承 SimpleInstantiationStrategy,`getInstantiationStrategy().instantiate`调用到
+SimpleInstantiationStrategy.instantiate:
 ```
 public Object instantiate(RootBeanDefinition bd, String beanName, BeanFactory owner) {
 	constructorToUse = (Constructor<?>) bd.resolvedConstructorOrFactoryMethod;
@@ -220,11 +207,6 @@ public Object instantiate(RootBeanDefinition bd, String beanName, BeanFactory ow
 		constructorToUse =	clazz.getDeclaredConstructor((Class[]) null);	// 获取构造方法
 		
 		return BeanUtils.instantiateClass(constructorToUse); // 返回实例
-	
-	
-
-	
-
 }
 
 public static <T> T instantiateClass(Constructor<T> ctor, Object... args)... {
@@ -232,14 +214,10 @@ public static <T> T instantiateClass(Constructor<T> ctor, Object... args)... {
 	return ctor.newInstance(args);	// 返回实例
 }
 
-
 ```
 
 
-
-
-
-在读取配置时，已经将属性的propername，type，等基本消息读取存放到PropertyValues中，
+在读取配置时，已经将属性的propername，type等基本消息读取存放到PropertyValues中，
 `populateBean`解析属性的值，并注入到bean中。
 ```
 protected void populateBean(String beanName, RootBeanDefinition mbd, BeanWrapper bw) {
@@ -251,12 +229,12 @@ protected void populateBean(String beanName, RootBeanDefinition mbd, BeanWrapper
 			mbd.getResolvedAutowireMode() == RootBeanDefinition.AUTOWIRE_BY_TYPE) {
 		MutablePropertyValues newPvs = new MutablePropertyValues(pvs);
 
-		// 通过name自动注入
+		// 通过bean name自动注入
 		if (mbd.getResolvedAutowireMode() == RootBeanDefinition.AUTOWIRE_BY_NAME) {
 			autowireByName(beanName, mbd, bw, newPvs);
 		}
 
-		// 通过type自动注入
+		// 通过bean type自动注入
 		if (mbd.getResolvedAutowireMode() == RootBeanDefinition.AUTOWIRE_BY_TYPE) {
 			autowireByType(beanName, mbd, bw, newPvs);
 		}
@@ -266,7 +244,7 @@ protected void populateBean(String beanName, RootBeanDefinition mbd, BeanWrapper
 
 
 	boolean hasInstAwareBpps = hasInstantiationAwareBeanPostProcessors();
-	... 根据需要进行postProcesst处理
+	// 根据需要进行postProcesst处理
 	for (BeanPostProcessor bp : getBeanPostProcessors()) {
 		if (bp instanceof InstantiationAwareBeanPostProcessor) {
 			InstantiationAwareBeanPostProcessor ibp = (InstantiationAwareBeanPostProcessor) bp;
@@ -284,16 +262,20 @@ protected void populateBean(String beanName, RootBeanDefinition mbd, BeanWrapper
 ```
 
 
-
+查看一下通过bean name获取属性值
 ```
 protected void autowireByName(
 			String beanName, AbstractBeanDefinition mbd, BeanWrapper bw, MutablePropertyValues pvs) {
 	for (String propertyName : propertyNames) {
 		Object bean = getBean(propertyName);	// 获取bean
-		pvs.add(propertyName, bean);	// 
+		pvs.add(propertyName, bean);	// 将bean添加到属性中
 		registerDependentBean(propertyName, beanName);	// 声明依赖
 	}			
 }
 ```
+
+属性的注入也是比较复杂的过程，这里不再展开了...
+ 
+
 
 
