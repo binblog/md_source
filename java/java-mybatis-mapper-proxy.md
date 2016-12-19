@@ -24,7 +24,7 @@ public void test() throws IOException {
     }
 }
 ```
-我们都知道，BlogMapper生成的代理类，调用mapper.selectBlog方法将执行数据库查询，将返回查询结果。
+我们都知道，通过`session.getMapper`可以获取mybatis生成的BlogMapper代理类，调用`mapper.selectBlog`方法将执行数据库查询，并将返回查询结果。
 
 ### mapper代理实现
 跟踪`session.getMapper`方法，最终调用到`DefaultSqlSession.getMapper`方法
@@ -42,29 +42,22 @@ public void test() throws IOException {
 可以看到这里将调用mapperRegistry.getMapper生成代理类。
 
 ### mapperRegistry初始化
-这里先看一下mapperRegistry的初始化过程
-`SqlSessionFactoryBuilder().build(inputStream);`构造初始环境，这里会调用到`XMLConfigBuilder.mapperElement`方法：
+先看一下mapperRegistry的初始化过程
+`SqlSessionFactoryBuilder().build(inputStream);`构造初始环境，并会调用到`mapperElement(root.evalNode("mappers"))`方法，该方法会解析配置文件中的mappers标签配置。
 ```
   private void mapperElement(XNode parent) throws Exception {
     if (parent != null) {
       for (XNode child : parent.getChildren()) {
         if ("package".equals(child.getName())) {
-          String mapperPackage = child.getStringAttribute("name");
-          configuration.addMappers(mapperPackage);
+          ...
         } else {
           String resource = child.getStringAttribute("resource");
           String url = child.getStringAttribute("url");
           String mapperClass = child.getStringAttribute("class");
           if (resource != null && url == null && mapperClass == null) {
-            ErrorContext.instance().resource(resource);
-            InputStream inputStream = Resources.getResourceAsStream(resource);
-            XMLMapperBuilder mapperParser = new XMLMapperBuilder(inputStream, configuration, resource, configuration.getSqlFragments());
-            mapperParser.parse();
+            ...
           } else if (resource == null && url != null && mapperClass == null) {
-            ErrorContext.instance().resource(url);
-            InputStream inputStream = Resources.getUrlAsStream(url);
-            XMLMapperBuilder mapperParser = new XMLMapperBuilder(inputStream, configuration, url, configuration.getSqlFragments());
-            mapperParser.parse();
+            ...
           } else if (resource == null && url == null && mapperClass != null) {
             Class<?> mapperInterface = Resources.classForName(mapperClass);
             configuration.addMapper(mapperInterface);
@@ -76,18 +69,33 @@ public void test() throws IOException {
     }
   }
 ```
-这里会对Mapper.xml文件进行解析，解析结果最终会调用configuration.addMapper/configuration.addMapper方法，这些方法会调用mapperRegistry.addMappers/mapperRegistry.addMapper对mapperRegistry初始化。
-
-`MapperRegistry.addMapper`内容如下
+方法中对mappers标签配置的resource，url，class属性分别进行解析。而对class属性的解析`configuration.addMapper(mapperInterface);`会调用MapperRegistry.addMapper方法：
 ```
 public <T> void addMapper(Class<T> type) {
-    ...
-    knownMappers.put(type, new MapperProxyFactory<T>(type));
-}
+	...
+	knownMappers.put(type, new MapperProxyFactory<T>(type));	// 添加代理生成工厂
+	MapperAnnotationBuilder parser = new MapperAnnotationBuilder(config, type);	// 解析class
+    parser.parse();
+}		
 ```
 
+MapperAnnotationBuilder.parse
+```
+  public void parse() {
+    ...
+      Method[] methods = type.getMethods();
+      for (Method method : methods) {
+        parseStatement(method);	// 解析方法
+
+      }
+   
+   
+  }
+```
+`parseStatement(method)`会将class中的方法解析为MappedStatement对象,并存储在configuration.mappedStatements属性中。
+
 ### mapperRegistry生成代理
-`mapperRegistry.getMapper`内容如下
+mapperRegistry.getMapper内容如下
 ```
 public <T> T getMapper(Class<T> type, SqlSession sqlSession) {
 final MapperProxyFactory<T> mapperProxyFactory = (MapperProxyFactory<T>) knownMappers.get(type);
@@ -96,18 +104,18 @@ final MapperProxyFactory<T> mapperProxyFactory = (MapperProxyFactory<T>) knownMa
 }
 ```
 
-`MapperProxyFactory.newInstance`内容如下
+MapperProxyFactory.newInstance会创建一个代理对象
 ```
-  protected T newInstance(MapperProxy<T> mapperProxy) {
-    return (T) Proxy.newProxyInstance(mapperInterface.getClassLoader(), new Class[] { mapperInterface }, mapperProxy);
-  }
-
   public T newInstance(SqlSession sqlSession) {
     final MapperProxy<T> mapperProxy = new MapperProxy<T>(sqlSession, mapperInterface, methodCache);
     return newInstance(mapperProxy);
   }
+
+  protected T newInstance(MapperProxy<T> mapperProxy) {
+    return (T) Proxy.newProxyInstance(mapperInterface.getClassLoader(), new Class[] { mapperInterface }, mapperProxy);
+  }
 ```
-`MapperProxy`即为动态代理类，实现了InvocationHandler接口
+`MapperProxy`即为动态代理类，实现了InvocationHandler接口，当调用mapper接口的方法时，将调用到MapperProxy的invoke方法：
 ```
 public class MapperProxy<T> implements InvocationHandler, Serializable {
     ...
@@ -124,3 +132,24 @@ public class MapperProxy<T> implements InvocationHandler, Serializable {
     }
 }
 ```
+如果执行的方法不是Object方法，将执行`mapperMethod.execute`方法
+```
+public Object execute(SqlSession sqlSession, Object[] args) {
+    Object result;
+    if (SqlCommandType.INSERT == command.getType()) {
+      Object param = method.convertArgsToSqlCommandParam(args);
+      result = rowCountResult(sqlSession.insert(command.getName(), param));
+    } else if (SqlCommandType.UPDATE == command.getType()) {
+      ...
+    } else if (SqlCommandType.DELETE == command.getType()) {
+      ...
+    } else if (SqlCommandType.SELECT == command.getType()) {
+      ...
+    } else {
+      throw new BindingException("Unknown execution method for: " + command.getName());
+    }
+    ...
+    return result;
+  }
+```
+`mapperMethod.execute`方法会转化参数，调用SqlSession进行insert/update/delete/select操作,最后处理结果并返回。

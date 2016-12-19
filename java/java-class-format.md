@@ -275,7 +275,7 @@ ca fe ba be | |  魔法数
 
 *表中（位置:x/y）对应上图中字节在WinHex中的位置*
 
-下面第一个方法`inti<>`中的code属性(位置从120/4到150/f)  
+下面解析第一个方法`inti<>`中的code属性(位置从120/4到150/f)  
 根据code属性表结构
 
 类型 | 名称 | 数量
@@ -291,7 +291,7 @@ exception_info | exception_table | exception_table_length
 u2 | attributes_count | 1
 attribute_info | attributes | attributes_count
 
-解析字节如下
+解析结果如下
 
 16进制值 | 10进制值 | 	解析
 ---|---|---
@@ -302,15 +302,18 @@ attribute_info | attributes | attributes_count
 00 00 00 05 | 5 | 字节码数量
 2A B7 00 01 B1 	| 字节码
 00 00 | | 不抛出异常
-00 02	| 2 | 2个局部变量
-00 0a | 10 | **局部变量1** attribute_name_index 指定变量#10 -字符串值:LineNumberTable
+00 02	| 2 | 携带2个属性
+00 0a | 10 | **变量1** attribute_name_index 指定变量#10 -字符串值:LineNumberTable
 00 00 00 06  | 6  | attribute_length 
 000100000006   | | 
-00 0b  | 11| **局部变量2** attribute_name_index   指定变量#11 -字符串值:LocalVariableTable
+00 0b  | 11| **变量2** attribute_name_index   指定变量#11 -字符串值:LocalVariableTable
 00 00 00 0c | 12 | attribute_length
 000100000005000C000D0000 | |
 
-在实例方法局部变量表中会预留出每一个Variable Slot（局部变量表最小单位）位来存放对象实例引用
+max_stack代表操作数栈深度的最大值。在方法执行的任意时刻，，操作数栈都不会超过这个深度。虚拟机运动的时候需要根据这个值来分配栈桢中的操作栈深度。 
+max_locals代表局部变量表所需的存储空间，单位是Variable Slot（虚拟机为局部变量分配内存所使用的最小单位。）
+
+在实例方法局部变量表中会预留出第一个 Slot 位来存放对象实例引用，所以max_stack/max_locals为1
 
 
 最重要是字节码`2A B7 00 01 B1`，虚拟机将方法体中的代码转化为字节码存储在这里。  

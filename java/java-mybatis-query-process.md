@@ -253,12 +253,10 @@ public <E> List<E> query(Statement statement, ResultHandler resultHandler) throw
 ```
 resultSetHandler负责对结果进行处理。
 
-上述简单记录了一下mysql的sql查询的执行流程，但对于核心的实现并没有详细分析，如
+上述只是简单记录了mybatis的sql查询的执行流程，并没有对核心的实现进行详细分析，如
 **MappedStatement.getBoundSql**解析sql语句  
 **ParameterHandler.setParameters**处理查询参数  
-**resultSetHandler.handleResultSets**处理查询结果
-
-同时，对于核心管理也还没有涉及到  
+**resultSetHandler.handleResultSets**处理查询结果  
 **连接管理**  
 **事务管理**  
 **缓存实现**
