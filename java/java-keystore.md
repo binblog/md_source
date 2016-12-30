@@ -1,16 +1,15 @@
-密钥库是存储加密密钥和证书的存储设备。 它们最常用于SSL通信，以证明服务器和客户端的身份。 三种条目可以存储在密钥库中，具体取决于密钥库的类型。
+密钥库是存储加密密钥和证书的存储设备。 它们最常用于SSL通信，用来证明服务器和客户端的身份。 三种条目可以存储在密钥库中。
 
-PrivateKey：这是一种用于非对称加密的密钥类型。 它通常用密码保护，因为它的敏感性。 它也可以用于签名数字签名。
+PrivateKey：用于非对称加密的密钥条目。因为它很敏感，所以常用密码保护，它也常用于加密数字签名
+Certificate ：证书，证书中常包含公钥。它通常用于验证服务器的身份。 
+SecretKey：用于对称加密的密钥条目。
 
-证书：证书包含可以标识证书中声明的主题的公钥。 它通常用于验证服务器的身份。 有时，它还用于在请求时标识客户端。
-
-SecretKey：在对称加密中使用的密钥条目。
-
-根据密钥库可以存储的条目以及密钥库可以如何存储条目，Java中有几种不同类型的密钥库：JKS，JCEKS，PKCS12，PKCS11和DKS。 您可以在Oracle的Java Cryptography Architecture描述中找到这些密钥库的介绍。
+Java中有几种不同类型的密钥库：JKS，JCEKS，PKCS12，PKCS11和DKS。 您可以在Oracle的Java Cryptography Architecture描述中找到这些密钥库的介绍。
 
 
-KeyStore 是java定义的密钥库，可以存储PrivateKey和证书，但不能存储SecretKey。可以使用KeyStore Explorer 查看。
+KeyStore 是java定义的密钥库，可以存储PrivateKey和Certificate，但不能存储SecretKey。KeyStore可以使用KeyStore Explorer 查看。
 
+可以使用keytool工具生成了server.keystore:
 ```
 >keytool -genkey -alias server  -keyalg RSA  -keystore server.keystore
 输入密钥库口令:
@@ -34,7 +33,7 @@ CN=a, OU=a, O=a, L=a, ST=a, C=a是否正确?
         (如果和密钥库口令相同, 按回车):
 再次输入新口令:
 ```
-使用keytool工具生成了server.keystore,这时server.keystore已经包括了PrivateKey和Certificate证书。  
+命令执行完后，当前目录会生成server.keystore， server.keystore中包含了PrivateKey和Certificate。  
 **上面输入了密钥库口令和密钥口令，密钥库口令用于打开密钥库，而密钥口令用于在java中加载PrivateKey**
 alias用于区分密钥库的不同条目。
 
@@ -74,21 +73,18 @@ KeyIdentifier [
 ]
 ]
 ```
-![](java-keystore/1.png)
-使用KeyStore Explorer 打开server.keystore，可以看到当前密钥库中存在两个条目，一个是client的证书，另一个是server的密钥对，可以使用密钥对导出证书。
+使用KeyStore Explorer 打开server.keystore
+![](java-keystore/1.png)  
+可以看到当前密钥库中存在两个条目，一个是client的证书，另一个是server的密钥对，可以使用密钥对导出证书。
 
 
-KeyStore 
-KeyManagerFactory 
-TrustManagerFactory 
-在java程序中`trustManagerFactory.init(null);`，java会按如下顺序查找keystore
-1. 如果定义了 system property 
-javax.net.ssl.trustStore
-则加载该属性指定文件。如果还定义了
-javax.net.ssl.trustStore，则其值将用于在打开信任库之前检查其中的数据的完整性。
-2. <java-home>/lib/security/jssecacerts
-存在，该文件将被使用。
-3. <java-home>/lib/security/cacerts 存在，将被使用。
+java中定义了java.security.KeyStore，javax.net.ssl.KeyManagerFactory，javax.net.ssl.TrustManagerFactory这几个类来处理KeyStore，PrivateKey，Certificate。
+
+在java程序中`trustManagerFactory.init(null);`加载证时，java会按如下顺序查找keystore  
+1. 如果定义了system property:javax.net.ssl.trustStore,则加载该属性指定文件。  
+如果还定义了javax.net.ssl.trustStore属性，则其值将用于打开信任库之前检查其中的数据的完整性。  
+2. 如果<java-home>/lib/security/jssecacerts存在，则使用该文件。  
+3. 如果<java-home>/lib/security/cacerts 存在，则使用该文件。  
 
 也可以通过如下代码自行加载keystore：
 ```
@@ -117,3 +113,7 @@ public static SSLContext loadSSLContext(String jksPath, String publicPassword, S
         return sslContext;
     }
 ```
+
+参考：  
+[Java 和 HTTP 的那些事（四） HTTPS 和 证书](http://www.aneasystone.com/archives/2016/04/java-and-https.html)  
+[Different types of keystore in Java](http://www.pixelstech.net/article/1408345768-Different-types-of-keystore-in-Java----Overview)
