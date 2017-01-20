@@ -78,3 +78,36 @@ public void refresh() throws BeansException, IllegalStateException {
 		}
 	}
 ```
+
+ClassPathXmlApplicationContext
+AbstractXmlApplicationContext
+AbstractRefreshableConfigApplicationContext
+AbstractRefreshableApplicationContext
+AbstractApplicationContext
+```
+@Override
+public Object getBean(String name) throws BeansException {
+	assertBeanFactoryActive();
+	return getBeanFactory().getBean(name);
+}
+```
+可以看到，通过beanFactory获取bean。
+
+
+ConfigurableListableBeanFactory beanFactory = obtainFreshBeanFactory();
+
+```
+public ClassPathXmlApplicationContext(String[] configLocations, boolean refresh, ApplicationContext parent)
+		throws BeansException {
+
+	super(parent);
+	setConfigLocations(configLocations);
+	if (refresh) {
+		refresh();
+	}
+}
+```
+
+AbstractBeanFactory.beanPostProcessors 属性
+
+

@@ -1,10 +1,11 @@
-[官网](http://zookeeper.apache.org/)下载，解压
+## 初体验
+1.[官网](http://zookeeper.apache.org/)下载，解压
 ```
 # wget -c http://mirrors.cnnic.cn/apache/zookeeper/stable/zookeeper-3.4.9.tar.gz
 # tar -xvz -f zookeeper-3.4.9.tar.gz
 # cd zookeeper-3.4.9
 ```
-下载的是最新的稳定版本3.4.9
+我下载的是最新的稳定版本3.4.9
 
 2.添加配置  
 conf目录下默认提供了一个简单的配置文件zoo_sample.cfg，创建文件conf/zoo.cfg，内容为
@@ -20,16 +21,19 @@ clientPort=2181
 3.启动
 ```
 # bin/zkServer.sh start
+# jps
+5156 QuorumPeerMain
+6120 Jps
 ```
 默认使用conf/zoo.cfg作为配置文件启动  
-jps可以看到QuorumPeerMain进程
+jps可以看到QuorumPeerMain进程正在运行。
 
 4.连接
 ```
 # bin/zkCli.sh -server 127.0.0.1:2181
 [zk: 127.0.0.1:2181(CONNECTED) 1] ls /
 [zookeeper]
-[zk: 127.0.0.1:2181(CONNECTED) 2] quit
+[zk: 127.0.0.1:2181(CONNECTED) 2] quit	
 #
 ```
 
@@ -42,8 +46,8 @@ Using config: /usr/local/my/zookeeper-3.4.9/bin/../conf/zoo.cfg
 Stopping zookeeper ... STOPPED
 ```
 
-单机伪集群配置
-创建dataDir：server0和server1，这两个目录下创建myid文件，内容分别为0,1
+## 单机伪集群配置  
+1. 创建dataDir：server0和server1，这两个目录下创建myid文件，内容分别为0,1
 ```
 # cat server0/myid
 0
@@ -52,8 +56,9 @@ Stopping zookeeper ... STOPPED
 ```
 myid中的数字表示服务器id
 
-配置文件
-创建两个配置文件conf/zoo0.cfg和conf/zoo1.cfg，内容为
+
+2. 创建两个配置文件conf/zoo0.cfg和conf/zoo1.cfg，内容为
+
 ```
 #conf/zoo0.cfg
 tickTime=2000
@@ -77,9 +82,12 @@ server.1=127.0.0.1:2881:3881
 ```
 server.A=B：C：D:其中 A 是一个数字，就是myid里的那个数字，表示这个是第几号服务器；B 是这个服务器的 ip 地址,C和D是两个端口。
 
+
 两个端口的作用，官网描述如下：
 
+
 >Finally, note the two port numbers after each server name: “ 2888” and “3888”. Peers use the former port to connect to other peers. Such a connection is necessary so that peers can communicate, for example, to agree upon the order of updates. More specifically, a ZooKeeper server uses this port to connect followers to the leader. When a new leader arises, a follower opens a TCP connection to the leader using this port. Because the default leader election also uses TCP, we currently require another port for leader election. This is the second port in the server entry.
+
 
 简单来说，第一个端口用来集群成员的信息交换以及与集群中的Leader 服务器交换信息，第二个端口是在leader挂掉时专门用来进行选举leader所用。
 
@@ -107,10 +115,9 @@ Mode: follower
 ZooKeeper JMX enabled by default
 Using config: /usr/local/my/zookeeper-3.4.9/bin/../conf/zoo1.cfg
 Mode: leader
-
 ```
 
-
+同步操作
 ```
 # bin/zkCli.sh -server 127.0.0.1:2180
 [zk: 127.0.0.1:2180(CONNECTED) 0] ls /
@@ -126,8 +133,8 @@ Quitting...
 [zk: 127.0.0.1:2181(CONNECTED) 0] ls /
 [hello, zookeeper]
 ```
-可以看到主从同步
+可以看到主从同步成功。
 
-
+参考：  
 https://my.oschina.net/vbird/blog/384043  
 http://brianway.github.io/2016/06/29/zookeeper-replicated/

@@ -1,6 +1,6 @@
 NIO（Non-blocking I/O，在Java领域，也称为New I/O），是一种同步非阻塞的I/O模型，也是I/O多路复用的基础，已经被越来越多地应用到大型应用服务器，成为解决高并发与大量连接、I/O处理问题的有效方式。
 
-## NIO实例
+## 举个栗子
 
 服务端
 ```
@@ -180,7 +180,8 @@ public class TCPClient {
 }
 ```
 
-NIO
+
+## NIO优势
 下图是几种常见I/O模型的对比：  
 ![](java-nio/1.png)  
 所有的系统I/O都分为两个阶段：等待就绪和操作。举例来说，读函数，分为等待系统可读和真正的读；同理，写函数分为等待网卡可以写和真正的写。
@@ -190,25 +191,22 @@ NIO
 
 传统的BIO里面socket.read()，如果TCP RecvBuffer里没有数据，函数会一直阻塞，直到收到数据，返回读到的数据。
 
-对于NIO，如果TCP RecvBuffer有数据，就把数据从网卡读到内存，并且返回给用户；反之则直接返回0，永远不会阻塞。当数据准备好时，系统将通过应用程序进行处理。
+而对于NIO，即上图的io复用，需要使用selector角色。当用户进程调用了select，那么整个进程会被block，而同时，kernel会“监视”所有select负责的socket，当任何一个socket中的数据准备好了，select就会返回。这个时候用户进程再调用read操作，将数据从kernel拷贝到用户进程。
 
+所以，I/O 多路复用的特点是通过一种机制一个进程能同时等待多个文件描述符，而这些文件描述符（套接字描述符）其中的任意一个进入读就绪状态，select()函数就可以返回。
+
+ 
 
 最新的AIO(Async I/O)里面会更进一步：不但等待就绪是非阻塞的，就连数据从网卡到内存的过程也是异步的。
 
 select，poll，epoll本质上都是同步I/O，因为他们都需要在读写事件就绪后自己负责进行读写，也就是说这个读写过程是阻塞的，而异步I/O则无需自己负责进行读写，异步I/O的实现会负责把数据从内核拷贝到用户空间。
 
-Reactor模式
+## Reactor模式
 
-reactor是事件通知机制，与nio非常符合。与atm类似
+为了提高并发量，nio常与多线程结合使用。reactor是事件通知机制，有助于优雅地使用nio和多线程。
 
-上例中存在一些问题，如
-cpu处理和io等待在同一线程，CPU的处理速度是要远远快于IO速度的，如果CPU为了IO操作（例如从Socket读取一段数据）而阻塞显然是不划算的。
-对于不同的请求类型，需要联系上下文（如user查询请求需要user连接，product请求product连接），再使用read、write这样的网络IO获取此次的操作内容，结合上下文状态查询此时应当选择哪个业务方法处理，随着请求类型的增加，请求状态的增加，请求命令的增加，主程序复杂度快速膨胀，导致维护越来越困难
+reactor模式中存在reactor角色，它接受所有handler的注册，并不断等待和循环，接收系统IO就绪事件，IO就绪后就调用指定handler进行处理。
 
-
-这时先驱们找到了事件驱动，或者叫回调的方式，来完成这件事情。这种方式就是，应用业务向一个中间人注册一个回调（event handler），当IO就绪后，就这个中间人产生一个事件，并通知此handler进行处理。这种回调的方式，也体现了“好莱坞原则”（Hollywood principle）-“Don't call us, we'll call you”，在我们熟悉的IoC中也有用到。看来软件开发真是互通的！
-
-好了，我们现在来看Reactor模式。在前面事件驱动的例子里有个问题：我们如何知道IO就绪这个事件，谁来充当这个中间人？Reactor模式的答案是：由一个不断等待和循环的单独进程（线程）来做这件事，它接受所有handler的注册，并负责先操作系统查询IO是否就绪，在就绪后就调用指定handler进行处理，这个角色的名字就叫做Reactor。
 
 reactor
 ```
@@ -332,7 +330,13 @@ public class Handler implements Runnable {
     }
 }
 ```
+上述代码仍然存在问题，每个IO事件处理都创建了一个线程，线程的创建和销毁都极耗费cpu，所以这里应用使用线程池。
+更多Reactor模式请参考Doug Lea的[《Scalable IO in Java》](http://gee.cs.oswego.edu/dl/cpjslides/nio.pdf)
+
+
 
 参考：  
 [Linux IO模式及 select、poll、epoll详解](https://segmentfault.com/a/1190000003063859)  
-[Java NIO浅析](http://tech.meituan.com/nio.html)
+[Java NIO浅析](http://tech.meituan.com/nio.html)  
+[支撑 Java NIO 与 NodeJS 的底层技术](http://www.codeceo.com/article/java-nio-nodejs.html)
+[【Java TCP/IP Socket】基于NIO的TCP通信（含代码）](http://www.importnew.com/20188.html)
